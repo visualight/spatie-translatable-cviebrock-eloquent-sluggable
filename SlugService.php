@@ -1,5 +1,6 @@
 <?php namespace Cviebrock\EloquentSluggable\Services;
 
+use App\Page;
 use Cocur\Slugify\Slugify;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -138,15 +139,6 @@ class SlugService
             return $value;
         }, (array)$from);
 
-        //dd($sourceStrings);
-
-        /*foreach ($sourceStrings[0] as $key => $string){
-            $datas[$key] = join(' ', $string);
-        }
-
-        dd($datas);*/
-
-        //return join($sourceStrings, ' ');
         return $sourceStrings[0];
     }
 
@@ -171,16 +163,16 @@ class SlugService
                 $slug[$key] = $slugEngine->slugify($el, $separator);
             }
 
-            //$slug = $slugEngine->slugify($source, $separator);
-
         } elseif (is_callable($method)) {
             $slug = call_user_func($method, $source, $separator);
         } else {
             throw new \UnexpectedValueException('Sluggable "method" for ' . get_class($this->model) . ':' . $attribute . ' is not callable nor null.');
         }
 
-        if (is_string($slug) && $maxLength) {
-            $slug = mb_substr($slug, 0, $maxLength);
+        foreach ($slug as $key => $s){
+            if (is_string($s) && $maxLength) {
+                $slug[$key] = mb_substr($s, 0, $maxLength);
+            }
         }
 
         return $slug;
@@ -234,19 +226,25 @@ class SlugService
         }
 
         if (is_array($reserved)) {
-            if (in_array($slug, $reserved)) {
 
-                $method = $config['uniqueSuffix'];
-                if ($method === null) {
-                    $suffix = $this->generateSuffix($slug, $separator, collect($reserved));
-                } elseif (is_callable($method)) {
-                    $suffix = call_user_func($method, $slug, $separator, collect($reserved));
-                } else {
-                    throw new \UnexpectedValueException('Sluggable "uniqueSuffix" for ' . get_class($this->model) . ':' . $attribute . ' is not null, or a closure.');
+            foreach ($slug as $key => $s){
+
+                if (in_array($s, $reserved)) {
+                    $method = $config['uniqueSuffix'];
+                    if ($method === null) {
+                        $suffix = $this->generateSuffix($slug, $separator, collect($reserved));
+                    } elseif (is_callable($method)) {
+                        $suffix = call_user_func($method, $slug, $separator, collect($reserved));
+                    } else {
+                        throw new \UnexpectedValueException('Sluggable "uniqueSuffix" for ' . get_class($this->model) . ':' . $attribute . ' is not null, or a closure.');
+                    }
+
+                    foreach ($suffix as $k => $suffixe){
+                        if($k == $key){
+                            $slug[$key] = $s . $separator .$suffixe;
+                        }
+                    }
                 }
-
-                return $slug . $separator . $suffix;
-
             }
 
             return $slug;
@@ -270,42 +268,13 @@ class SlugService
             return $slug;
         }
 
+        $method = $config['uniqueSuffix'];
         $separator = $config['separator'];
         $response = null;
 
         // find all models where the slug is like the current one
         $list = $this->getExistingSlugs($slug, $attribute, $config);
-        $check = $list->toArray();
 
-        //d($list);
-
-        // if ...
-        // 	a) the list is empty, or
-        // 	b) our slug isn't in the list
-        // ... we are okay
-        /*if ($list->count() === 0 || $list->contains($slug) === false) {
-            return $slug;
-        }*/
-
-        if (count($list) == 0 || empty(array_intersect($check, $slug))) {
-            return $slug;
-        }
-
-        // if our slug is in the list, but
-        // 	a) it's for our model, or
-        //  b) it looks like a suffixed version of our slug
-        // ... we are also okay (use the current slug)
-
-        //dd($this->model->getKey());
-        if ($list->has($this->model->getKey())) {
-            $currentSlug = $list->get($this->model->getKey());
-
-            if ($currentSlug === $slug || strpos($currentSlug, $slug) === 0) {
-                return $currentSlug;
-            }
-        }
-
-        $method = $config['uniqueSuffix'];
         if ($method === null) {
             $suffix = $this->generateSuffix($slug, $separator, $list);
         } elseif (is_callable($method)) {
@@ -313,7 +282,7 @@ class SlugService
         } else {
             throw new \UnexpectedValueException('Sluggable "uniqueSuffix" for ' . get_class($this->model) . ':' . $attribute . ' is not null, or a closure.');
         }
-
+        
         foreach ($slug as $key => $s){
             foreach ($suffix as $k => $suffixe){
                 if($k == $key){
@@ -335,36 +304,30 @@ class SlugService
      */
     protected function generateSuffix($slug, $separator, Collection $list)
     {
-        $suffixe1 = [];
-        $suffixe2 = [];
+        $suffixe = [];
 
-        foreach ($slug as $key => $s){
-            // If the slug already exists, but belongs to
-            // our model, return the current suffix.
-            if ($list->search($s) === $this->model->getKey()) {
-                $suffix = explode($separator, $s);
+        foreach ($slug as $ks => $s){
 
-                $suffixe1[$key] = end($suffix);
-            }
-        }
-
-        if(count($suffixe1) > 0){
-            return $suffixe1;
-        }
-
-        foreach ($slug as $key => $s){
+            $test = collect();
             $len = strlen($s . $separator);
 
-            $list->transform(function ($value, $key) use ($len) {
+            foreach($list as $k => $al){
+                if($k == $ks){
+                    foreach ($al as $l){
+                        $test->push($l);
+                    }
+                }
+            }
+
+            $test->transform(function ($value, $key) use ($len) {
                 return intval(substr($value, $len));
             });
 
-            $suffixe2[$key] = $list->max() + 1;
+            // find the highest value and return one greater.
+            $suffixe[$ks] = $test->max() + 1;
         }
 
-        // find the highest value and return one greater.
-        //return $list->max() + 1;
-        return $suffixe2;
+        return $suffixe;
     }
 
     /**
@@ -378,12 +341,16 @@ class SlugService
     protected function getExistingSlugs($slug, $attribute, array $config)
     {
         $includeTrashed = $config['includeTrashed'];
-        $response = collect();
+        $separator = $config['separator'];
+        $list = [];
+
+        //dd($slug);
 
         foreach ($slug as $key => $s){
 
-            $query = $this->model->where(function($q) use ($attribute, $key, $s) {
+            $query = $this->model->where(function($q) use ($attribute, $key, $s, $separator) {
                 $q->where("$attribute->$key", $s);
+                $q->orWhere("$attribute->$key", 'LIKE', '"'.$s . $separator.'%');
             });
 
             // use the model scope to find similar slugs
@@ -397,45 +364,43 @@ class SlugService
             }
 
             $results = $query->select([$attribute, $this->model->getTable() . '.' . $this->model->getKeyName()])
-                ->first();
+                ->get()->toBase();
 
-            //dd($results);
+            if(count($results) > 0) {
 
-            if($results) {
+                foreach ($results as $res){
+                    $transalations = $res->getTranslations('slug');
 
-                $transalations = $results->getTranslations('slug');
-
-                foreach ($transalations as $k => $trans){
-                    if($trans == $s){
-                        $response->push($s);
+                    foreach ($transalations as $k => $trans){
+                        $list[$k][] = $trans;
                     }
                 }
             }
         }
 
-        /*$query = $this->model->newQuery()
-            ->findSimilarSlugs($this->model, $attribute, $config, $slug);
-
-
-        // use the model scope to find similar slugs
-        if (method_exists($this->model, 'scopeWithUniqueSlugConstraints')) {
-            $query->withUniqueSlugConstraints($this->model, $attribute, $config, $slug);
-        }
-
-        // include trashed models if required
-        if ($includeTrashed && $this->usesSoftDeleting()) {
-            $query->withTrashed();
-        }
-
-        // get the list of all matching slugs
-        $results = $query->select([$attribute, $this->model->getTable() . '.' . $this->model->getKeyName()])
-            ->get()
-            ->toBase();
-        */
-
+        //dd($list);
+        $list = $this->filterArray($list, $separator);
+        //$list = array_unique($list);
 
         // key the results and return
-        return $response;
+        return collect($list);
+    }
+
+    /**
+     * Array Unique
+     *
+     * @param $array
+     * @return mixed
+     */
+    private function filterArray($array, $separator)
+    {
+        $datas = collect();
+
+        foreach ($array as $key => $arr){
+            $datas[$key] = array_unique($arr);
+        }
+
+        return $datas;
     }
 
     /**
