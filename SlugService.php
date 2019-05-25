@@ -76,7 +76,7 @@ class SlugService
      */
     public function buildSlug($attribute, array $config, $force = null)
     {
-        //$slug = $this->model->getAttribute($attribute);
+        $slug = $this->model->getTranslations($attribute); // check for update
 
         if ($force || $this->needsSlugging($attribute, $config)) {
             $source = $this->getSlugSource($config['source']);
@@ -125,8 +125,6 @@ class SlugService
         if (is_null($from)) {
             return $this->model->__toString();
         }
-
-        //dd($this->model);
 
         $sourceStrings = array_map(function ($key) {
             //$value = data_get($this->model, $key);
@@ -282,7 +280,7 @@ class SlugService
         } else {
             throw new \UnexpectedValueException('Sluggable "uniqueSuffix" for ' . get_class($this->model) . ':' . $attribute . ' is not null, or a closure.');
         }
-        
+
         foreach ($slug as $key => $s){
             foreach ($suffix as $k => $suffixe){
                 if($k == $key){
@@ -378,10 +376,8 @@ class SlugService
             }
         }
 
-        //dd($list);
         $list = $this->filterArray($list, $separator);
-        //$list = array_unique($list);
-
+        
         // key the results and return
         return collect($list);
     }
