@@ -1,6 +1,5 @@
 <?php namespace Cviebrock\EloquentSluggable\Services;
 
-use App\Page;
 use Cocur\Slugify\Slugify;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -273,6 +272,10 @@ class SlugService
         // find all models where the slug is like the current one
         $list = $this->getExistingSlugs($slug, $attribute, $config);
 
+        if ($list->count() === 0) {
+            return $slug;
+        }
+
         if ($method === null) {
             $suffix = $this->generateSuffix($slug, $separator, $list);
         } elseif (is_callable($method)) {
@@ -377,7 +380,7 @@ class SlugService
         }
 
         $list = $this->filterArray($list, $separator);
-        
+
         // key the results and return
         return collect($list);
     }
