@@ -75,7 +75,7 @@ class SlugService
      */
     public function buildSlug($attribute, array $config, $force = null)
     {
-        $slug = $this->model->getTranslations($attribute); // check for update
+        $slug = $this->checkSlugs($this->model->getTranslations($attribute)); // check for update
 
         if ($force || $this->needsSlugging($attribute, $config)) {
             $source = $this->getSlugSource($config['source']);
@@ -91,6 +91,25 @@ class SlugService
     }
 
     /**
+     * Remove extra slugs
+     *
+     * @param $slug
+     * @return mixed
+     */
+    protected function checkSlugs($slug){
+        $locales = config('app.locales');
+
+        if(count($slug) > 0){
+            foreach ($slug as $k=>$v){
+                if(!array_key_exists($k, $locales)){
+                    unset($slug[$k]);
+                }
+            }
+        }
+        return $slug;
+    }
+
+    /**
      * Determines whether the model needs slugging.
      *
      * @param string $attribute
@@ -99,10 +118,7 @@ class SlugService
      */
     protected function needsSlugging($attribute, array $config)
     {
-        if (
-            empty($this->model->getAttributeValue($attribute)) ||
-            $config['onUpdate'] === true
-        ) {
+        if (empty($this->model->getAttributeValue($attribute)) || $config['onUpdate'] === true) {
             return true;
         }
 
